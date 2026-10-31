@@ -6,7 +6,11 @@ import { handleMention } from "./mention.ts";
 const token = process.env.DISCORD_TOKEN;
 const clientId = process.env.DISCORD_CLIENT_ID;
 const guildId = process.env.DISCORD_GUILD_ID;
-const dailyChannelId = process.env.DAILY_CHANNEL_ID;
+// Comma-separated, one channel per server that wants the daily wisdom
+const dailyChannelIds = (process.env.DAILY_CHANNEL_ID ?? "")
+  .split(",")
+  .map((id) => id.trim())
+  .filter(Boolean);
 
 if (!token || !clientId) {
   console.error("DISCORD_TOKEN and DISCORD_CLIENT_ID must be set");
@@ -15,9 +19,11 @@ if (!token || !clientId) {
 
 const commandMap = new Map(commands.map((c) => [c.data.name, c]));
 
-// Registering to a single guild is instant; global registration can take up to an hour to propagate.
+const rest = new REST().setToken(token!);
+
+// Registering to a single guild is instant, for testing; global registration reaches every server the bot is in
+// but can take up to an hour to propagate.
 async function registerCommands() {
-  const rest = new REST().setToken(token!);
   const body = commands.map((c) => c.data.toJSON());
   const route = guildId
     ? Routes.applicationGuildCommands(clientId!, guildId)
@@ -26,14 +32,23 @@ async function registerCommands() {
   console.log(`Registered ${body.length} command(s) ${guildId ? `to guild ${guildId}` : "globally"}`);
 }
 
+// Commands left over from testing with DISCORD_GUILD_ID would show up twice next to the global ones
+async function clearGuildCommands(guildIds: string[]) {
+  for (const id of guildIds) await rest.put(Routes.applicationGuildCommands(clientId!, id), { body: [] });
+  console.log(`Cleared guild-only commands in ${guildIds.length} guild(s)`);
+}
+
 // MessageContent is privileged: it must also be enabled on the Developer Portal's Bot page
 const client = new Client({
   intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent],
 });
 
 client.once(Events.ClientReady, (c) => {
-  console.log(`Logged in as ${c.user.tag}`);
-  scheduleDailyWisdom(c, dailyChannelId);
+  console.log(`Logged in as ${c.user.tag}, in ${c.guilds.cache.size} guild(s)`);
+  if (!guildId) {
+    clearGuildCommands([...c.guilds.cache.keys()]).catch((err) => console.error("Error clearing guild commands:", err));
+  }
+  scheduleDailyWisdom(c, dailyChannelIds);
 });
 
 client.on(Events.MessageCreate, (message) => {

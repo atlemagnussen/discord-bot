@@ -28,18 +28,21 @@ export async function postWisdom(client: Client<true>, channelId: string) {
 }
 
 // Checks the Oslo wall clock every 20 seconds, which handles daylight saving without any date maths
-export function scheduleDailyWisdom(client: Client<true>, channelId: string | undefined) {
-  if (!channelId) {
+export function scheduleDailyWisdom(client: Client<true>, channelIds: string[]) {
+  if (channelIds.length === 0) {
     console.log("DAILY_CHANNEL_ID not set, daily wisdom disabled");
     return;
   }
-  console.log(`Daily wisdom scheduled for ${POST_AT} ${TIME_ZONE} in channel ${channelId}`);
+  console.log(`Daily wisdom scheduled for ${POST_AT} ${TIME_ZONE} in channel(s) ${channelIds.join(", ")}`);
 
   let lastPosted = "";
-  setInterval(() => {
+  setInterval(async () => {
     const [date, time] = osloClock.format(new Date()).split(" ");
     if (time !== POST_AT || lastPosted === date) return;
     lastPosted = date;
-    postWisdom(client, channelId).catch((err) => console.error("Error posting daily wisdom:", err));
+    // One at a time: the GPU answers one request at a time anyway, and each server gets its own wisdom
+    for (const channelId of channelIds) {
+      await postWisdom(client, channelId).catch((err) => console.error(`Error posting daily wisdom to ${channelId}:`, err));
+    }
   }, 20_000);
 }

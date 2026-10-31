@@ -12,10 +12,10 @@ Bot token → Bot page → Reset Token → copy it. This is DISCORD_TOKEN.
 You only see the token once. If you lose it, reset it again. It's a password, so never commit it. .env and secret.yaml are already in .gitignore.
 On the same page, under Privileged Gateway Intents, turn **Message Content Intent** on. The bot reads messages that mention it, and it fails to log in ("disallowed intents") without this. Presence and Server Members can stay off.
 
-2. Get your server ID (optional, but recommended while developing)
+2. Get your server ID (optional, for testing)
    In the Discord app, go to User Settings → Advanced → Developer Mode and turn it on.
    Right-click your server's icon → Copy Server ID. This is DISCORD_GUILD_ID.
-   With this set, slash commands show up in that server straight away. Without it, they register globally, and that can take up to an hour.
+   With this set, slash commands show up in that server only, straight away. Leave it empty to serve every server the bot is in: commands then register globally, which can take up to an hour. On startup the bot also removes server-only commands left over from testing, so they don't show up twice.
 
 3. Invite the bot to your server
    In the portal, go to OAuth2 → URL Generator.
@@ -24,8 +24,17 @@ On the same page, under Privileged Gateway Intents, turn **Message Content Inten
    Copy the generated URL at the bottom, open it in a browser, pick your server and authorise. You need the "Manage Server" permission on that server.
    The bot will now be listed as a member, but it shows as offline until you run it.
 
-4. Choose a channel for the daily poppel wisdom (optional)
-   Right-click the channel → Copy Channel ID. This is DAILY_CHANNEL_ID. Leave it empty to turn the daily post off.
+4. Choose channels for the daily poppel wisdom (optional)
+   Right-click the channel → Copy Channel ID. This is DAILY_CHANNEL_ID. For several servers, separate the IDs with commas. Leave it empty to turn the daily post off.
+
+### Adding the bot to other servers
+
+1. On the Developer Portal's **Bot** page, turn **Public Bot** on, or nobody else can add the bot.
+2. Leave `DISCORD_GUILD_ID` empty and redeploy, so the commands register globally.
+3. Send the invite URL from step 3 to an admin of the other server (someone with "Manage Server"). The same URL works for every server.
+4. For the daily wisdom there, ask them for a channel ID and add it to `DAILY_CHANNEL_ID`.
+
+One bot process serves all servers, and the GPU answers one mention at a time, so on busy servers replies queue up. Message Content Intent needs no review from Discord as long as the bot is in fewer than 100 servers.
 
 ## AI (llama.cpp on the GPU)
 
@@ -86,6 +95,6 @@ npm run dev
 | `/hei`    | Replies with a greeting                                       |
 | `/poppel` | Posts a random sentence from poppel.news, linking to the issue |
 
-Besides commands, the bot answers in poppel whenever someone @mentions it (the bot or its role), using what people wrote in the channel over the last 30 minutes (up to 10 messages) as background. Its own earlier answers are left out, because the model would copy them. At 07:57 Norwegian time it posts a daily poppel wisdom in `DAILY_CHANNEL_ID`.
+Besides commands, the bot answers in poppel whenever someone @mentions it (the bot or its role), using what people wrote in the channel over the last 30 minutes (up to 10 messages) as background. Its own earlier answers are left out, because the model would copy them. At 07:57 Norwegian time it posts a daily poppel wisdom in each channel in `DAILY_CHANNEL_ID`.
 
 To add a command, create a file in `src/commands/` modelled on `hei.ts` and add it to `src/commands/index.ts`. All user-facing text is in poppel (see `AGENTS.md`). Commands are registered with Discord each time the bot starts.

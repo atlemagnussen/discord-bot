@@ -5,4 +5,17 @@ services:
       dockerfile: Containerfile
     image: localhost/pvg-bot:latest
     env_file: .env
+    environment:
+      OLLAMA_URL: http://ollama:11434
     restart: unless-stopped
+  ollama:
+    image: docker.io/ollama/ollama:0.40.5
+    environment:
+      OLLAMA_KEEP_ALIVE: "-1"
+    devices:
+      - nvidia.com/gpu=all
+    volumes:
+      - ollama-models:/root/.ollama
+    restart: unless-stopped
+volumes:
+  ollama-models:

@@ -1,9 +1,13 @@
 import { Client, Events, GatewayIntentBits, MessageFlags, REST, Routes } from "discord.js";
+import { ensureModel } from "./ai.ts";
 import { commands } from "./commands/index.ts";
+import { scheduleDailyWisdom } from "./daily.ts";
+import { handleMention } from "./mention.ts";
 
 const token = process.env.DISCORD_TOKEN;
 const clientId = process.env.DISCORD_CLIENT_ID;
 const guildId = process.env.DISCORD_GUILD_ID;
+const dailyChannelId = process.env.DAILY_CHANNEL_ID;
 
 if (!token || !clientId) {
   console.error("DISCORD_TOKEN and DISCORD_CLIENT_ID must be set");
@@ -23,10 +27,18 @@ async function registerCommands() {
   console.log(`Registered ${body.length} command(s) ${guildId ? `to guild ${guildId}` : "globally"}`);
 }
 
-const client = new Client({ intents: [GatewayIntentBits.Guilds] });
+// MessageContent is privileged: it must also be enabled on the Developer Portal's Bot page
+const client = new Client({
+  intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent],
+});
 
 client.once(Events.ClientReady, (c) => {
   console.log(`Logged in as ${c.user.tag}`);
+  scheduleDailyWisdom(c, dailyChannelId);
+});
+
+client.on(Events.MessageCreate, (message) => {
+  handleMention(client as Client<true>, message).catch((err) => console.error("Error handling message:", err));
 });
 
 client.on(Events.InteractionCreate, async (interaction) => {
@@ -54,3 +66,5 @@ for (const signal of ["SIGINT", "SIGTERM"] as const) {
 
 await registerCommands();
 await client.login(token);
+// Runs in the background so /hei and /poppel work while the model downloads
+ensureModel().catch((err) => console.error("Error preparing AI model:", err));

@@ -10,3 +10,24 @@ spec:
       envFrom:
         - secretRef:
             name: pvg-bot
+      env:
+        # Containers in a pod share localhost
+        - name: OLLAMA_URL
+          value: http://localhost:11434
+    - name: ollama
+      image: docker.io/ollama/ollama:0.40.5
+      env:
+        # Keep the model loaded in VRAM instead of unloading it after 5 minutes idle
+        - name: OLLAMA_KEEP_ALIVE
+          value: "-1"
+      resources:
+        limits:
+          nvidia.com/gpu=all: 1
+      volumeMounts:
+        - name: ollama-models
+          mountPath: /root/.ollama
+  volumes:
+    # Podman named volume, so the ~5 GB model survives pod restarts and redeploys
+    - name: ollama-models
+      persistentVolumeClaim:
+        claimName: pvg-bot-ollama

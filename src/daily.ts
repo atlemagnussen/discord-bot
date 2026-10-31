@@ -1,5 +1,5 @@
 import type { Client } from "discord.js";
-import { chat } from "./ai.ts";
+import { dailyWisdom } from "./ai.ts";
 
 const TIME_ZONE = "Europe/Oslo";
 const POST_AT = "07:57";
@@ -14,28 +14,12 @@ const osloClock = new Intl.DateTimeFormat("sv-SE", {
   hourCycle: "h23",
 });
 
-// The model tends to add a heading and an explanation around the wisdom; keep only the wisdom itself
-function extractWisdom(answer: string) {
-  const quoted = answer.match(/"([^"\n]{15,})"/)?.[1];
-  if (quoted) return quoted.trim();
-  const lines = answer.split("\n").map((l) => l.replace(/\*\*/g, "").trim());
-  return lines.find((l) => l && !l.endsWith(":")) ?? answer;
-}
-
 export async function postWisdom(client: Client<true>, channelId: string) {
   const channel = await client.channels.fetch(channelId);
   if (!channel?.isSendable()) throw new Error(`Channel ${channelId} not found or not sendable`);
 
   const botName = ("guild" in channel && channel.guild?.members.me?.displayName) || client.user.displayName;
-  const answer = await chat(botName, [
-    {
-      role: "user",
-      content:
-        "Kom med dagens poppelvisdom: eitt kort visdomsord som høyrest klokt ut, men er heilt på trynet. " +
-        "Skriv berre sjølve visdomsordet, utan innleiing.",
-    },
-  ]);
-  const wisdom = extractWisdom(answer);
+  const wisdom = await dailyWisdom(botName);
   await channel.send({
     content: `🌅 **Dagens poppelvisdom**\n> ${wisdom.replace(/\n/g, "\n> ")}`.slice(0, 2000),
     allowedMentions: { parse: [] },

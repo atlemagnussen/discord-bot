@@ -12,22 +12,38 @@ spec:
             name: pvg-bot
       env:
         # Containers in a pod share localhost
-        - name: OLLAMA_URL
-          value: http://localhost:11434
-    - name: ollama
-      image: docker.io/ollama/ollama:0.40.5
+        - name: AI_URL
+          value: http://localhost:8080
+    - name: llama
+      # Pinned on purpose: this build uses CUDA 12.4 and includes Pascal code, so it runs on the GTX 1060
+      # with Debian's driver 550. Newer images need driver 570+ for that card.
+      image: ghcr.io/ggml-org/llama.cpp:server-cuda-b5121
+      args:
+        - --hf-repo
+        - NbAiLab/nb-llama-3.1-8B-Instruct-Q4_K_M-GGUF
+        - --hf-file
+        - nb-llama-3.1-8b-instruct-q4_k_m.gguf
+        # Put all layers on the GPU
+        - --n-gpu-layers
+        - "99"
+        - --ctx-size
+        - "4096"
+        - --host
+        - 0.0.0.0
+        - --port
+        - "8080"
       env:
-        # Keep the model loaded in VRAM instead of unloading it after 5 minutes idle
-        - name: OLLAMA_KEEP_ALIVE
-          value: "-1"
+        # Where --hf-repo downloads the model to
+        - name: LLAMA_CACHE
+          value: /models
       resources:
         limits:
           nvidia.com/gpu=all: 1
       volumeMounts:
-        - name: ollama-models
-          mountPath: /root/.ollama
+        - name: models
+          mountPath: /models
   volumes:
     # Podman named volume, so the ~5 GB model survives pod restarts and redeploys
-    - name: ollama-models
+    - name: models
       persistentVolumeClaim:
-        claimName: pvg-bot-ollama
+        claimName: pvg-bot-models

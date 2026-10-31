@@ -1,5 +1,4 @@
 import { Client, Events, GatewayIntentBits, MessageFlags, REST, Routes } from "discord.js";
-import { ensureModel } from "./ai.ts";
 import { commands } from "./commands/index.ts";
 import { scheduleDailyWisdom } from "./daily.ts";
 import { handleMention } from "./mention.ts";
@@ -66,5 +65,3 @@ for (const signal of ["SIGINT", "SIGTERM"] as const) {
 
 await registerCommands();
 await client.login(token);
-// Runs in the background so /hei and /poppel work while the model downloads
-ensureModel().catch((err) => console.error("Error preparing AI model:", err));

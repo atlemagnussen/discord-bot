@@ -1,5 +1,5 @@
 import type { Client, Message } from "discord.js";
-import { chat, type ChatMessage } from "./ai.ts";
+import { reply, type ChatMessage } from "./ai.ts";
 
 const CONTEXT_MESSAGES = 10;
 
@@ -40,7 +40,7 @@ export async function handleMention(client: Client<true>, message: Message) {
 
   try {
     const botName = message.guild?.members.me?.displayName ?? client.user.displayName;
-    const answer = await chat(botName, await conversation(message, client.user.id));
+    const answer = await reply(botName, await conversation(message, client.user.id));
     // The model may write "@everyone"; never let generated text ping anyone
     await message.reply({ content: answer.slice(0, 2000), allowedMentions: { parse: [], repliedUser: false } });
   } catch (err) {

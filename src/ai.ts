@@ -1,20 +1,21 @@
-// Talks to a local Ollama server. Everything AI-specific lives here, so swapping engine means rewriting this file.
+// Talks to the AI server over the OpenAI-compatible chat API, which both llama.cpp (the default, see pod.yaml)
+// and Ollama serve. Everything AI-specific lives here.
 import { randomExcerpt } from "./poppelNews.ts";
 
-const OLLAMA_URL = process.env.OLLAMA_URL || "http://localhost:11434";
-const MODEL = process.env.OLLAMA_MODEL || "hf.co/NbAiLab/nb-llama-3.1-8B-Instruct-Q4_K_M-GGUF";
+const AI_URL = process.env.AI_URL || "http://localhost:8080";
+// llama.cpp serves the one model it was started with and ignores this; Ollama needs it
+const AI_MODEL = process.env.AI_MODEL || "nb-llama";
 
 export interface ChatMessage {
   role: "user" | "assistant";
   content: string;
 }
 
-// The prompt itself is written in nynorsk: small models stick to the language they are spoken to in.
-// It tells the model its own name, or it treats "@PvG" as someone else and greets itself.
-function systemPrompt(botName: string, excerpt: string) {
+// Prompts are written in nynorsk: small models stick to the language they are spoken to in.
+// The model is told its own name, or it treats "@PvG" as someone else and greets itself.
+function systemPrompt(botName: string, task: string, excerpt: string) {
   return `Du er ${botName}, ein Discord-bot som snakkar poppel: nynorsk i same stil som PoppelNytt, \
-med absurde, overdrivne småhistorier frå bygda. Når nokon skriv @${botName}, snakkar dei til deg. \
-Svar personen direkte på nynorsk med 1 til 3 korte, rare og morosame setningar.
+med absurde, overdrivne småhistorier frå bygda. ${task}
 
 Stilprøve frå PoppelNytt:
 """
@@ -22,9 +23,9 @@ ${excerpt}
 """`;
 }
 
-// Small models learn the answer format far better from examples than from rules: without these,
-// NB-Llama 8B tends to recite its instructions back
-function examples(botName: string): ChatMessage[] {
+// Small models learn the answer format far better from examples than from rules: without them,
+// NB-Llama 8B recites its instructions back. Each task gets its own examples, or the model mixes them up.
+function replyExamples(botName: string): ChatMessage[] {
   return [
     { role: "user", content: `Kari: @${botName} kva åt du til frukost?` },
     {
@@ -39,93 +40,78 @@ function examples(botName: string): ChatMessage[] {
   ];
 }
 
+const WISDOM_REQUEST = "Kom med dagens poppelvisdom.";
+const WISDOM_EXAMPLES: ChatMessage[] = [
+  { role: "user", content: WISDOM_REQUEST },
+  { role: "assistant", content: "Den som pantar pallen før frukost, har 57 kroner meir til fiskeslim." },
+  { role: "user", content: WISDOM_REQUEST },
+  { role: "assistant", content: "Ein klok mann teipar aldri piggsvinet før han har smakt på kneippbrødet." },
+];
+
+// Answers the conversation that ends with someone mentioning the bot
+export function reply(botName: string, conversation: ChatMessage[]) {
+  const task = `Når nokon skriv @${botName}, snakkar dei til deg. \
+Svar personen direkte på nynorsk med 1 til 3 korte, rare og morosame setningar.`;
+  return generate(botName, task, [...replyExamples(botName), ...conversation], 120);
+}
+
+// A wisdom is one sentence; the model likes to keep going or comment on it in parentheses afterwards
+export async function dailyWisdom(botName: string) {
+  const task = "Kvar morgon skriv du dagens poppelvisdom: eitt kort visdomsord som høyrest klokt ut, men er heilt på trynet.";
+  const answer = await generate(botName, task, [...WISDOM_EXAMPLES, { role: "user", content: WISDOM_REQUEST }], 60);
+  const firstSentence = answer.replace(/\s*\([^)]*\)?/g, "").match(/^.+?[.!?](?=\s|$)/s)?.[0];
+  return firstSentence ?? answer;
+}
+
 // Small models sometimes loop or ramble into nothing; one retry with a fresh excerpt usually fixes it
-export async function chat(botName: string, messages: ChatMessage[]) {
+async function generate(botName: string, task: string, messages: ChatMessage[], maxTokens: number) {
   try {
-    return await chatOnce(botName, messages);
+    return await chatOnce(botName, task, messages, maxTokens);
   } catch (err) {
     console.warn("AI answer failed, retrying:", err instanceof Error ? err.message : err);
-    return chatOnce(botName, messages);
+    return chatOnce(botName, task, messages, maxTokens);
   }
 }
 
-async function chatOnce(botName: string, messages: ChatMessage[]) {
-  const res = await fetch(`${OLLAMA_URL}/api/chat`, {
+async function chatOnce(botName: string, task: string, messages: ChatMessage[], maxTokens: number) {
+  const res = await fetch(`${AI_URL}/v1/chat/completions`, {
     method: "POST",
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      model: MODEL,
-      stream: false,
+      model: AI_MODEL,
       messages: [
-        { role: "system", content: systemPrompt(botName, await randomExcerpt(700)) },
-        ...examples(botName),
+        { role: "system", content: systemPrompt(botName, task, await randomExcerpt(700)) },
         ...messages,
       ],
-      options: { num_ctx: 4096, num_predict: 120, temperature: 0.9, repeat_penalty: 1.15 },
+      max_tokens: maxTokens,
+      temperature: 0.9,
+      repeat_penalty: 1.15,
     }),
   });
-  if (!res.ok) throw new Error(`Ollama chat failed: ${res.status} ${await res.text()}`);
-  const data = (await res.json()) as { message: { content: string }; done_reason?: string };
-  return tidy(data.message.content, data.done_reason === "length");
+  if (!res.ok) throw new Error(`AI chat failed: ${res.status} ${await res.text()}`);
+  const data = (await res.json()) as { choices: { message: { content: string }; finish_reason: string }[] };
+  const [choice] = data.choices;
+  return tidy(choice.message.content, choice.finish_reason === "length");
 }
 
-// Small models imitate the "Name: text" format of the conversation, sometimes writing the next turns themselves,
-// and like to wrap answers in quotes
+// Small models imitate the "Name: text" format of the conversation, sometimes writing the next turns themselves
+// or a commentary on their own answer after a blank line, and like to wrap answers in quotes
 function tidy(answer: string, cutOff: boolean) {
   let text = answer.trim();
-  const nextTurn = text.search(/\n\s*[\p{L}-]{1,20}:/u);
-  if (nextTurn > 0) {
-    text = text.slice(0, nextTurn);
+  const end = text.search(/\n\s*\n|\n\s*[\p{L}-]{1,20}:/u);
+  if (end > 0) {
+    text = text.slice(0, end);
     cutOff = false;
   }
   text = text
-    .replace(/^[\p{L}-]{1,20}:\s+/u, "")
+    .replace(/^[\p{L}-]+(?: [\p{L}-]+){0,2}:\s+/u, "")
     .replace(/^"([\s\S]*)"$/, "$1")
     .trim();
-  // Hitting num_predict stops mid-sentence; end on the last complete one instead
+  // Hitting max_tokens stops mid-sentence; end on the last complete one instead
   if (cutOff) {
     const lastEnd = Math.max(text.lastIndexOf("."), text.lastIndexOf("!"), text.lastIndexOf("?"));
     if (lastEnd > 0) text = text.slice(0, lastEnd + 1);
   }
   if (!text) throw new Error(`Model gave no usable answer: ${JSON.stringify(answer)}`);
   return text;
-}
-
-// Waits for Ollama to come up, then downloads the model if it isn't there yet (about 5 GB the first time)
-export async function ensureModel() {
-  for (;;) {
-    try {
-      const show = await fetch(`${OLLAMA_URL}/api/show`, { method: "POST", body: JSON.stringify({ model: MODEL }) });
-      if (show.ok) {
-        console.log(`AI model ${MODEL} is ready`);
-        return;
-      }
-      break;
-    } catch {
-      console.log(`Waiting for Ollama at ${OLLAMA_URL}...`);
-      await new Promise((r) => setTimeout(r, 5000));
-    }
-  }
-
-  console.log(`Downloading AI model ${MODEL}...`);
-  const res = await fetch(`${OLLAMA_URL}/api/pull`, { method: "POST", body: JSON.stringify({ model: MODEL }) });
-  if (!res.ok || !res.body) throw new Error(`Ollama pull failed: ${res.status} ${await res.text()}`);
-
-  // The pull streams one JSON object per line; log progress every 10%
-  let buffer = "";
-  let lastLogged = -1;
-  for await (const chunk of res.body.pipeThrough(new TextDecoderStream())) {
-    buffer += chunk;
-    const lines = buffer.split("\n");
-    buffer = lines.pop()!;
-    for (const line of lines.filter(Boolean)) {
-      const status = JSON.parse(line) as { status?: string; error?: string; total?: number; completed?: number };
-      if (status.error) throw new Error(`Ollama pull failed: ${status.error}`);
-      if (status.total && status.completed) {
-        const percent = Math.floor((status.completed / status.total) * 10) * 10;
-        if (percent > lastLogged) console.log(`Downloading AI model: ${percent}%`);
-        lastLogged = Math.max(lastLogged, percent);
-      }
-    }
-  }
-  console.log(`AI model ${MODEL} is ready`);
 }

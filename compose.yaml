@@ -6,16 +6,30 @@ services:
     image: localhost/pvg-bot:latest
     env_file: .env
     environment:
-      OLLAMA_URL: http://ollama:11434
+      AI_URL: http://llama:8080
     restart: unless-stopped
-  ollama:
-    image: docker.io/ollama/ollama:0.40.5
+  llama:
+    # See pod.yaml for why this version is pinned
+    image: ghcr.io/ggml-org/llama.cpp:server-cuda-b5121
+    command:
+      - --hf-repo
+      - NbAiLab/nb-llama-3.1-8B-Instruct-Q4_K_M-GGUF
+      - --hf-file
+      - nb-llama-3.1-8b-instruct-q4_k_m.gguf
+      - --n-gpu-layers
+      - "99"
+      - --ctx-size
+      - "4096"
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8080"
     environment:
-      OLLAMA_KEEP_ALIVE: "-1"
+      LLAMA_CACHE: /models
     devices:
       - nvidia.com/gpu=all
     volumes:
-      - ollama-models:/root/.ollama
+      - models:/models
     restart: unless-stopped
 volumes:
-  ollama-models:
+  models:

@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: pvg-bot
+spec:
+  restartPolicy: Always
+  containers:
+    - name: bot
+      image: localhost/pvg-bot:latest
+      envFrom:
+        - secretRef:
+            name: pvg-bot

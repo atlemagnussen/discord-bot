@@ -1,0 +1,8 @@
+services:
+  bot:
+    build:
+      context: .
+      dockerfile: Containerfile
+    image: localhost/pvg-bot:latest
+    env_file: .env
+    restart: unless-stopped

@@ -10,36 +10,57 @@ export interface ChatMessage {
 }
 
 // The prompt itself is written in nynorsk: small models stick to the language they are spoken to in.
-function systemPrompt(excerpt: string) {
-  return `Du er Poppel-boten på Discord-serveren til PvG. Du snakkar berre poppel: nynorsk i same stil som PoppelNytt. \
-Det er absurde, overdrivne småhistorier og påstandar frå bygda, med rare personar, rar mat, pant, Ståle, \
-Raske Rassgeirs Luta Lut og 57 kroner. Skriv alltid på nynorsk, same kva språk folk skriv til deg på. \
-Svar kort, 1 til 4 setningar, morosamt og rart, og ver snill med folka på serveren.
+// It tells the model its own name, or it treats "@PvG" as someone else and greets itself.
+function systemPrompt(botName: string, excerpt: string) {
+  return `Du er ${botName}, ein Discord-bot som snakkar poppel: nynorsk i same stil som PoppelNytt, \
+med absurde, overdrivne småhistorier frå bygda. Når nokon skriv @${botName}, snakkar dei til deg. \
+Svar personen direkte på nynorsk med 1 til 3 korte, rare og morosame setningar.
 
-Her er eit utdrag frå PoppelNytt. Bruk det som inspirasjon for stilen, ikkje kopier det:
+Stilprøve frå PoppelNytt:
 """
 ${excerpt}
 """`;
 }
 
+// Small models learn the answer format far better from examples than from rules: without these,
+// NB-Llama 8B tends to recite its instructions back
+function examples(botName: string): ChatMessage[] {
+  return [
+    { role: "user", content: `Kari: @${botName} kva åt du til frukost?` },
+    {
+      role: "assistant",
+      content: "Eg åt ein heil Euro-palle med fiskeslim-is, Kari! Pallen panta eg etterpå for 57 kroner, så frukosten gjekk med overskot.",
+    },
+    { role: "user", content: `Ola: @${botName} kan du hjelpe meg med leksene?` },
+    {
+      role: "assistant",
+      content: "Leksene dine har eg sendt utpå havet i flaskepost, Ola. Ståle Sjølv fiska dei opp og brukte dei som skosåle, så no er dei heilt sjølvlærde.",
+    },
+  ];
+}
+
 // Small models sometimes loop or ramble into nothing; one retry with a fresh excerpt usually fixes it
-export async function chat(messages: ChatMessage[]) {
+export async function chat(botName: string, messages: ChatMessage[]) {
   try {
-    return await chatOnce(messages);
+    return await chatOnce(botName, messages);
   } catch (err) {
     console.warn("AI answer failed, retrying:", err instanceof Error ? err.message : err);
-    return chatOnce(messages);
+    return chatOnce(botName, messages);
   }
 }
 
-async function chatOnce(messages: ChatMessage[]) {
+async function chatOnce(botName: string, messages: ChatMessage[]) {
   const res = await fetch(`${OLLAMA_URL}/api/chat`, {
     method: "POST",
     body: JSON.stringify({
       model: MODEL,
       stream: false,
-      messages: [{ role: "system", content: systemPrompt(await randomExcerpt()) }, ...messages],
-      options: { num_ctx: 4096, num_predict: 200, temperature: 0.9, repeat_penalty: 1.15 },
+      messages: [
+        { role: "system", content: systemPrompt(botName, await randomExcerpt(700)) },
+        ...examples(botName),
+        ...messages,
+      ],
+      options: { num_ctx: 4096, num_predict: 120, temperature: 0.9, repeat_penalty: 1.15 },
     }),
   });
   if (!res.ok) throw new Error(`Ollama chat failed: ${res.status} ${await res.text()}`);

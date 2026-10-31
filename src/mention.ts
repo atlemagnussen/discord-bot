@@ -39,7 +39,8 @@ export async function handleMention(client: Client<true>, message: Message) {
   const typing = setInterval(() => channel.sendTyping().catch(() => {}), 8000);
 
   try {
-    const answer = await chat(await conversation(message, client.user.id));
+    const botName = message.guild?.members.me?.displayName ?? client.user.displayName;
+    const answer = await chat(botName, await conversation(message, client.user.id));
     // The model may write "@everyone"; never let generated text ping anyone
     await message.reply({ content: answer.slice(0, 2000), allowedMentions: { parse: [], repliedUser: false } });
   } catch (err) {

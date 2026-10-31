@@ -26,7 +26,8 @@ export async function postWisdom(client: Client<true>, channelId: string) {
   const channel = await client.channels.fetch(channelId);
   if (!channel?.isSendable()) throw new Error(`Channel ${channelId} not found or not sendable`);
 
-  const answer = await chat([
+  const botName = ("guild" in channel && channel.guild?.members.me?.displayName) || client.user.displayName;
+  const answer = await chat(botName, [
     {
       role: "user",
       content:

@@ -6,6 +6,13 @@ const AI_URL = process.env.AI_URL || "http://localhost:8080";
 // llama.cpp serves the one model it was started with and ignores this; Ollama needs it
 const AI_MODEL = process.env.AI_MODEL || "nb-llama";
 
+// The AI server is starting: llama.cpp downloads the model on first start, then loads it into memory
+export class AiNotReadyError extends Error {
+  constructor() {
+    super("AI server is not ready yet");
+  }
+}
+
 export interface ChatMessage {
   role: "user" | "assistant";
   content: string;
@@ -68,6 +75,7 @@ async function generate(botName: string, task: string, messages: ChatMessage[], 
   try {
     return await chatOnce(botName, task, messages, maxTokens);
   } catch (err) {
+    if (err instanceof AiNotReadyError) throw err;
     console.warn("AI answer failed, retrying:", err instanceof Error ? err.message : err);
     return chatOnce(botName, task, messages, maxTokens);
   }
@@ -87,7 +95,13 @@ async function chatOnce(botName: string, task: string, messages: ChatMessage[], 
       temperature: 0.9,
       repeat_penalty: 1.15,
     }),
+  }).catch((err) => {
+    // Nothing listens on the port while llama.cpp downloads the model
+    if (err?.cause?.code === "ECONNREFUSED") throw new AiNotReadyError();
+    throw err;
   });
+  // llama.cpp answers 503 while it loads the model into memory
+  if (res.status === 503) throw new AiNotReadyError();
   if (!res.ok) throw new Error(`AI chat failed: ${res.status} ${await res.text()}`);
   const data = (await res.json()) as { choices: { message: { content: string }; finish_reason: string }[] };
   const [choice] = data.choices;

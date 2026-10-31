@@ -45,7 +45,7 @@ Host requirements, once per machine:
 
   Re-run the `generate` command after a driver upgrade or a GPU swap.
 
-On first start the `llama` container downloads the model (about 5 GB) into the `pvg-bot-models` podman volume. `/hei` and `/poppel` work in the meantime; mentions get an error reply until it is done. The model stays in that volume across redeploys. To use another model, change `--hf-repo` and `--hf-file` in `pod.yaml` to any GGUF on Hugging Face.
+On first start the `llama` container downloads the model (about 5 GB) into the `pvg-bot-models` podman volume. `/hei` and `/poppel` work in the meantime; mentions get a "still waking up" reply until the model is downloaded and loaded. The model stays in that volume across redeploys. To use another model, change `--hf-repo` and `--hf-file` in `pod.yaml` to any GGUF on Hugging Face.
 
 ## Run
 

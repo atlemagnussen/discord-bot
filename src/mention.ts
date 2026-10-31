@@ -1,7 +1,12 @@
 import type { Client, Message } from "discord.js";
-import { reply, type ChatMessage } from "./ai.ts";
+import { AiNotReadyError, reply, type ChatMessage } from "./ai.ts";
 
 const CONTEXT_MESSAGES = 10;
+// Older messages belong to another conversation, and old bad answers would teach the model to repeat them
+const CONTEXT_MAX_AGE_MS = 30 * 60 * 1000;
+
+const NOT_READY_REPLY = "Eg held enno på å vakne, hjernen min kjem rennande inn frå internett. Prøv igjen om eit minutt eller to!";
+const ERROR_REPLY = "Uff, hjernen min er full i fiskeslim akkurat no. Prøv igjen om litt!";
 
 // Turns <@123> mentions into readable @names so the model sees who is talked about
 function cleanContent(message: Message) {
@@ -13,14 +18,21 @@ function cleanContent(message: Message) {
     .trim();
 }
 
-// The recent conversation in the channel, oldest first. The bot's own messages become "assistant" turns.
+// Of the bot's own messages, only its AI answers are conversation; the model copies whatever it sees itself say,
+// so fixed replies and daily wisdom posts (which are not replies) stay out
+function isAiAnswer(m: Message) {
+  return m.reference !== null && m.content !== NOT_READY_REPLY && m.content !== ERROR_REPLY;
+}
+
+// The recent conversation in the channel, oldest first. The bot's own answers become "assistant" turns.
 async function conversation(message: Message, botId: string): Promise<ChatMessage[]> {
   // Without Read Message History in the channel this fails; answer the message alone then
   const earlier = await message.channel.messages
     .fetch({ limit: CONTEXT_MESSAGES, before: message.id })
     .catch(() => new Map<string, Message>());
   return [...earlier.values(), message]
-    .filter((m) => m.content)
+    .filter((m) => m.content && message.createdTimestamp - m.createdTimestamp <= CONTEXT_MAX_AGE_MS)
+    .filter((m) => m.author.id !== botId || isAiAnswer(m))
     .sort((a, b) => a.createdTimestamp - b.createdTimestamp)
     .map((m) =>
       m.author.id === botId
@@ -44,8 +56,13 @@ export async function handleMention(client: Client<true>, message: Message) {
     // The model may write "@everyone"; never let generated text ping anyone
     await message.reply({ content: answer.slice(0, 2000), allowedMentions: { parse: [], repliedUser: false } });
   } catch (err) {
+    if (err instanceof AiNotReadyError) {
+      console.log("Mention while the AI server is still starting");
+      await message.reply(NOT_READY_REPLY);
+      return;
+    }
     console.error("Error answering mention:", err);
-    await message.reply("Uff, hjernen min er full i fiskeslim akkurat no. Prøv igjen om litt!");
+    await message.reply(ERROR_REPLY);
   } finally {
     clearInterval(typing);
   }

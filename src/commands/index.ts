@@ -1,4 +1,5 @@
 import type { Command } from "./types.ts";
-import { hello } from "./hello.ts";
+import { hei } from "./hei.ts";
+import { poppel } from "./poppel.ts";
 
-export const commands: Command[] = [hello];
+export const commands: Command[] = [hei, poppel];

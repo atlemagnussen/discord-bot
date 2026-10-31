@@ -38,7 +38,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
     await command.execute(interaction);
   } catch (err) {
     console.error(`Error in /${interaction.commandName}:`, err);
-    const reply = { content: "Something went wrong.", flags: MessageFlags.Ephemeral } as const;
+    const reply = { content: "Uff, noko gjekk gale.", flags: MessageFlags.Ephemeral } as const;
     if (interaction.replied || interaction.deferred) await interaction.followUp(reply);
     else await interaction.reply(reply);
   }

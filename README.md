@@ -4,9 +4,25 @@ A Discord bot written in TypeScript (discord.js) that runs as a container.
 
 ## Setup
 
-1. Create an application at https://discord.com/developers/applications.
-2. Invite the bot to your server: **OAuth2 → URL Generator**, scopes `bot` + `applications.commands`.
-3. Fill in the settings for how you run it (see below).
+1. Get the two required values (Developer Portal)
+   Open your application at https://discord.com/developers/applications.
+
+Application ID → General Information page → copy Application ID. This is DISCORD_CLIENT_ID.
+Bot token → Bot page → Reset Token → copy it. This is DISCORD_TOKEN.
+You only see the token once. If you lose it, reset it again. It's a password, so never commit it. .env and secret.yaml are already in .gitignore.
+On the same page you can leave the Privileged Gateway Intents (Presence, Server Members, Message Content) off. The bot only uses the basic Guilds intent (src/index.ts:26).
+
+2. Get your server ID (optional, but recommended while developing)
+   In the Discord app, go to User Settings → Advanced → Developer Mode and turn it on.
+   Right-click your server's icon → Copy Server ID. This is DISCORD_GUILD_ID.
+   With this set, slash commands show up in that server straight away. Without it, they register globally, and that can take up to an hour.
+
+3. Invite the bot to your server
+   In the portal, go to OAuth2 → URL Generator.
+   Under Scopes, tick bot and applications.commands.
+   Under Bot Permissions, tick at least Send Messages. View Channels is also sensible.
+   Copy the generated URL at the bottom, open it in a browser, pick your server and authorise. You need the "Manage Server" permission on that server.
+   The bot will now be listed as a member, but it shows as offline until you run it.
 
 ## Run
 
@@ -39,8 +55,9 @@ npm run dev
 
 ## Commands
 
-| Command  | What it does          |
-| -------- | --------------------- |
-| `/hello` | Replies with a greeting |
+| Command   | What it does                                                  |
+| --------- | ------------------------------------------------------------- |
+| `/hei`    | Replies with a greeting                                       |
+| `/poppel` | Posts a random sentence from poppel.news, linking to the issue |
 
-To add a command, create a file in `src/commands/` modelled on `hello.ts` and add it to `src/commands/index.ts`. Commands are registered with Discord each time the bot starts.
+To add a command, create a file in `src/commands/` modelled on `hei.ts` and add it to `src/commands/index.ts`. All user-facing text is in nynorsk (see `AGENTS.md`). Commands are registered with Discord each time the bot starts.

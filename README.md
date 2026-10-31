@@ -86,6 +86,6 @@ npm run dev
 | `/hei`    | Replies with a greeting                                       |
 | `/poppel` | Posts a random sentence from poppel.news, linking to the issue |
 
-Besides commands, the bot answers in poppel whenever someone @mentions it, using the last 10 messages in the channel as context. At 07:57 Norwegian time it posts a daily poppel wisdom in `DAILY_CHANNEL_ID`.
+Besides commands, the bot answers in poppel whenever someone @mentions it (the bot or its role), using what people wrote in the channel over the last 30 minutes (up to 10 messages) as background. Its own earlier answers are left out, because the model would copy them. At 07:57 Norwegian time it posts a daily poppel wisdom in `DAILY_CHANNEL_ID`.
 
 To add a command, create a file in `src/commands/` modelled on `hei.ts` and add it to `src/commands/index.ts`. All user-facing text is in poppel (see `AGENTS.md`). Commands are registered with Discord each time the bot starts.

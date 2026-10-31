@@ -13,21 +13,34 @@ export class AiNotReadyError extends Error {
   }
 }
 
-export interface ChatMessage {
+interface ChatMessage {
   role: "user" | "assistant";
   content: string;
 }
 
 // Prompts are written in nynorsk: small models stick to the language they are spoken to in.
 // The model is told its own name, or it treats "@PvG" as someone else and greets itself.
-function systemPrompt(botName: string, task: string, excerpt: string) {
-  return `Du er ${botName}, ein Discord-bot som snakkar poppel: nynorsk i same stil som PoppelNytt, \
+function systemPrompt({ botName, task, background }: Prompt, excerpt: string) {
+  const prompt = `Du er ${botName}, ein Discord-bot som snakkar poppel: nynorsk i same stil som PoppelNytt, \
 med absurde, overdrivne småhistorier frå bygda. ${task}
 
 Stilprøve frå PoppelNytt:
 """
 ${excerpt}
 """`;
+  if (!background) return prompt;
+  return `${prompt}
+
+Dette er skrive i kanalen like før, berre som bakgrunn:
+"""
+${background}
+"""`;
+}
+
+interface Prompt {
+  botName: string;
+  task: string;
+  background?: string;
 }
 
 // Small models learn the answer format far better from examples than from rules: without them,
@@ -55,40 +68,46 @@ const WISDOM_EXAMPLES: ChatMessage[] = [
   { role: "assistant", content: "Ein klok mann teipar aldri piggsvinet før han har smakt på kneippbrødet." },
 ];
 
-// Answers the conversation that ends with someone mentioning the bot
-export function reply(botName: string, conversation: ChatMessage[]) {
+const BACKGROUND_MAX_LENGTH = 1500;
+
+// Answers one message that mentions the bot, as "Name: text". Earlier channel messages go into the system prompt
+// as background: given as chat turns, the model continues the chat log instead of answering.
+export async function reply(botName: string, message: string, earlier: string[]) {
   const task = `Når nokon skriv @${botName}, snakkar dei til deg. \
 Svar personen direkte på nynorsk med 1 til 3 korte, rare og morosame setningar.`;
-  return generate(botName, task, [...replyExamples(botName), ...conversation], 120);
+  const background = earlier.join("\n").slice(-BACKGROUND_MAX_LENGTH);
+  const answer = await generate({ botName, task, background }, [...replyExamples(botName), { role: "user", content: message }], 120);
+  // It sometimes addresses itself, copying the "@PvG" from the message
+  return answer.replaceAll(`@${botName}`, "").replace(/ {2,}/g, " ").trim();
 }
 
 // A wisdom is one sentence; the model likes to keep going or comment on it in parentheses afterwards
 export async function dailyWisdom(botName: string) {
   const task = "Kvar morgon skriv du dagens poppelvisdom: eitt kort visdomsord som høyrest klokt ut, men er heilt på trynet.";
-  const answer = await generate(botName, task, [...WISDOM_EXAMPLES, { role: "user", content: WISDOM_REQUEST }], 60);
+  const answer = await generate({ botName, task }, [...WISDOM_EXAMPLES, { role: "user", content: WISDOM_REQUEST }], 60);
   const firstSentence = answer.replace(/\s*\([^)]*\)?/g, "").match(/^.+?[.!?](?=\s|$)/s)?.[0];
   return firstSentence ?? answer;
 }
 
 // Small models sometimes loop or ramble into nothing; one retry with a fresh excerpt usually fixes it
-async function generate(botName: string, task: string, messages: ChatMessage[], maxTokens: number) {
+async function generate(prompt: Prompt, messages: ChatMessage[], maxTokens: number) {
   try {
-    return await chatOnce(botName, task, messages, maxTokens);
+    return await chatOnce(prompt, messages, maxTokens);
   } catch (err) {
     if (err instanceof AiNotReadyError) throw err;
     console.warn("AI answer failed, retrying:", err instanceof Error ? err.message : err);
-    return chatOnce(botName, task, messages, maxTokens);
+    return chatOnce(prompt, messages, maxTokens);
   }
 }
 
-async function chatOnce(botName: string, task: string, messages: ChatMessage[], maxTokens: number) {
+async function chatOnce(prompt: Prompt, messages: ChatMessage[], maxTokens: number) {
   const res = await fetch(`${AI_URL}/v1/chat/completions`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       model: AI_MODEL,
       messages: [
-        { role: "system", content: systemPrompt(botName, task, await randomExcerpt(700)) },
+        { role: "system", content: systemPrompt(prompt, await randomExcerpt(700)) },
         ...messages,
       ],
       max_tokens: maxTokens,
@@ -118,6 +137,7 @@ function tidy(answer: string, cutOff: boolean) {
     cutOff = false;
   }
   text = text
+    .replace(/[!?]{4,}/g, "?!")
     .replace(/^[\p{L}-]+(?: [\p{L}-]+){0,2}:\s+/u, "")
     .replace(/^"([\s\S]*)"$/, "$1")
     .trim();

@@ -1,12 +1,9 @@
 import type { Client, Message } from "discord.js";
-import { AiNotReadyError, reply } from "./ai.ts";
+import { AiNotReadyError, ERROR_REPLY, NOT_READY_REPLY, reply } from "./ai.ts";
 
 const CONTEXT_MESSAGES = 10;
 // Older messages belong to another conversation
 const CONTEXT_MAX_AGE_MS = 30 * 60 * 1000;
-
-const NOT_READY_REPLY = "Eg held enno på å vakne, hjernen min kjem rennande inn frå internett. Prøv igjen om eit minutt eller to!";
-const ERROR_REPLY = "Uff, hjernen min er full i fiskeslim akkurat no. Prøv igjen om litt!";
 
 // Turns <@123> and <@&123> mentions into readable @names so the model sees who is talked about
 function cleanContent(message: Message) {

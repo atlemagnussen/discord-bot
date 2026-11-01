@@ -54,7 +54,7 @@ Host requirements, once per machine:
 
   Re-run the `generate` command after a driver upgrade or a GPU swap.
 
-On first start the `llama` container downloads the model (about 5 GB) into the `pvg-bot-models` podman volume. `/hei` and `/poppel` work in the meantime; mentions get a "still waking up" reply until the model is downloaded and loaded. The model stays in that volume across redeploys. To use another model, change `--hf-repo` and `--hf-file` in `pod.yaml` to any GGUF on Hugging Face.
+On first start the `llama` container downloads the model (about 5 GB) into the `pvg-bot-models` podman volume. `/hei` and `/poppel` work in the meantime; mentions and `/nyhende` get a "still waking up" reply until the model is downloaded and loaded. The model stays in that volume across redeploys. To use another model, change `--hf-repo` and `--hf-file` in `pod.yaml` to any GGUF on Hugging Face.
 
 ## Run
 
@@ -90,11 +90,12 @@ npm run dev
 
 ## Commands
 
-| Command   | What it does                                                  |
-| --------- | ------------------------------------------------------------- |
-| `/hei`    | Replies with a greeting                                       |
-| `/poppel` | Posts a random sentence from poppel.news, linking to the issue |
+| Command           | What it does                                                    |
+| ----------------- | --------------------------------------------------------------- |
+| `/hei`            | Replies with a greeting                                         |
+| `/poppel`         | Posts a random sentence from poppel.news, linking to the issue  |
+| `/nyhende [tema]` | The AI writes a new PoppelNytt story, about `tema` or a random topic |
 
-Besides commands, the bot answers in poppel whenever someone @mentions it (the bot or its role), using what people wrote in the channel over the last 30 minutes (up to 10 messages) as background. Its own earlier answers are left out, because the model would copy them. At 07:57 Norwegian time it posts a daily poppel wisdom in each channel in `DAILY_CHANNEL_ID`.
+Besides commands, the bot answers in poppel whenever someone @mentions it (the bot or its role), using what people wrote in the channel over the last 30 minutes (up to 10 messages) as background. Its own earlier answers are left out, because the model would copy them. `/nyhende` takes 10-30 seconds on a GTX 1060. The 8B model likes to copy sentences from the example stories in its prompt, so `newsStory()` in `src/ai.ts` drops those and tries again when too little is left. At 07:57 Norwegian time it posts a daily poppel wisdom in each channel in `DAILY_CHANNEL_ID`.
 
 To add a command, create a file in `src/commands/` modelled on `hei.ts` and add it to `src/commands/index.ts`. All user-facing text is in poppel (see `AGENTS.md`). Commands are registered with Discord each time the bot starts.

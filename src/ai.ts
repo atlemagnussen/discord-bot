@@ -21,11 +21,34 @@ interface ChatMessage {
   content: string;
 }
 
+// Places from poppel.news, so the bot's stories happen in the same bygd. Each request gets a few at random:
+// given all of them, the model crams every one into each answer.
+const PLACES = [
+  "Poppelvågen, vågen der Poppel skjer, med den årlege veitkakking-konkurransen",
+  "Ura, steinura ved Poppelvågen",
+  "Olden, dit folk tek feil buss og drikk seg fulle",
+  "Oldengrotta i Olden, der det kanskje er gull",
+  "Kjeldn', grenda med dei villaste festane",
+  "Kjeldenvatnet, nedanfor den bratte bakken i Kjeldn'",
+  "Skarabakken, der bussen til Fosnavåg alltid står fast",
+  "Lia, der gammelbjørnen held til",
+  "Urheim, der det meste endar",
+  "Konnøl-pøbben, der det alltid er rabalder",
+  "Per's Kro, med halvliter pils",
+  "ØL-utsalet",
+  "VIVO-butikken, som berre sel kubein, finlandshetter og kvikklunsj",
+  "Tomte Fryseri, som frys fisken for deg",
+  "Gratu Hotell i Sibir",
+];
+const PLACES_PER_PROMPT = 4;
+
 // Prompts are written in nynorsk: small models stick to the language they are spoken to in.
 // The model is told its own name, or it treats "@PvG" as someone else and greets itself.
 function systemPrompt({ botName, task, background }: Prompt, excerpt: string) {
   const prompt = `Du er ${botName}, ein Discord-bot som snakkar poppel: nynorsk i same stil som PoppelNytt, \
 med absurde, overdrivne småhistorier frå bygda. ${task}
+
+Nokre stader i bygda: ${sample(PLACES, PLACES_PER_PROMPT).join("; ")}.
 
 Stilprøve frå PoppelNytt:
 """
@@ -79,7 +102,7 @@ const STORY_EXAMPLES: [topic: string, story: string][] = [
   [
     "ei ny rundkøyring i bygda",
     "Kommunen opna i går ei splitter ny rundkøyring midt i bygda, med blomsterbed og ein svær stein av typen granitt. \
-Problemet var berre at ingen hadde fortalt bygdefolket kvar ein skal køyre ut, så Arnfinn frå Nedre Sjøvik har no køyrt rundt i tre døgn. \
+Problemet var berre at ingen hadde fortalt bygdefolket kvar ein skal køyre ut, så Arnfinn frå Poppelvågen har no køyrt rundt i tre døgn. \
 Han lever av kneippbrød og fiskeslim som kona kastar inn vindauget kvar gong han passerer. \
 Ordføraren seier rundkøyringa er ein stor suksess, sidan Arnfinn åleine står for 80 prosent av trafikken i kommunen.",
   ],
@@ -94,13 +117,13 @@ Geita er no vald inn i styret.",
     "den nye bilen til lensmannen",
     "Lensmannen fekk i går levert ein ny politibil, og han er så fin at lensmannen ikkje tør å køyre han. \
 I staden skubbar han bilen framfor seg på patrulje, med blålyset på og sirena i munnen. \
-Tjuvane i bygda har fått med seg dette og spring no berre litt fortare enn ein gamal mann med ein bil. \
+Tjuvane på Konnøl-pøbben har fått med seg dette og spring no berre litt fortare enn ein gamal mann med ein bil. \
 «Det er god trening», seier lensmannen, som har gått ned 14 kilo og teke null tjuvar sidan nyttår.",
   ],
   [
     "vinteren",
     "Vinteren har kome til bygda med eit brak, og snøen ligg så høgt at postbodet berre leverer brev gjennom pipa. \
-Bestemor Gudrun på Haugen har ikkje sett gardstunet sidan oktober, men klarer seg fint på syltetøy og radioteater. \
+Bestemor Gudrun i Lia har ikkje sett gardstunet sidan oktober, men klarer seg fint på syltetøy og radioteater. \
 Brøytebilen sette seg fast allereie første dag, og sjåføren har busett seg i førarhuset med kaffikjele og ein katt han fann i ei snøfonn. \
 Kommunen har no sendt eit klagebrev til sola.",
   ],
@@ -128,6 +151,11 @@ const STORY_TOPICS = [
   "ei hemmeleg vaffeloppskrift",
   "julebordet i grendalaget",
   "den nye sjefen på sagbruket",
+  "veitkakking-konkurransen i Poppelvågen",
+  "gullgraving i Oldengrotta",
+  "bussen til Fosnavåg",
+  "nyttårsfeiringa i Kjeldn'",
+  "eit tilbod på VIVO-butikken",
 ];
 
 const BACKGROUND_MAX_LENGTH = 1500;
@@ -161,7 +189,7 @@ export async function newsStory(botName: string, topic = pick(STORY_TOPICS)) {
 fortalt som om ho var heilt vanlege nyhende. Saka er eitt avsnitt på 4 til 8 setningar.";
   let best = "";
   for (let attempt = 1; attempt <= STORY_ATTEMPTS; attempt++) {
-    const examples = [...STORY_EXAMPLES].sort(() => Math.random() - 0.5).slice(0, 2);
+    const examples = sample(STORY_EXAMPLES, 2);
     const messages: ChatMessage[] = examples.flatMap(([exampleTopic, example]) => [
       { role: "user" as const, content: storyRequest(exampleTopic) },
       { role: "assistant" as const, content: example },
@@ -178,6 +206,10 @@ fortalt som om ho var heilt vanlege nyhende. Saka er eitt avsnitt på 4 til 8 se
   }
   if (!best) throw new Error("Every story attempt copied its examples");
   return best;
+}
+
+function sample<T>(items: T[], count: number) {
+  return [...items].sort(() => Math.random() - 0.5).slice(0, count);
 }
 
 // Every run of five consecutive words, to spot text copied from somewhere else
